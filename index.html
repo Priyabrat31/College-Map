@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>College Blueprint | Interactive Campus Map</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* ==========================================
+           CSS & RESPONSIVE DESIGN
+           ========================================== */
+        
+        :root {
+            --bg-color: #070c17; 
+            --grid-color: rgba(56, 189, 248, 0.05);
+            --panel-bg: rgba(15, 23, 42, 0.75);
+            --panel-border: rgba(56, 189, 248, 0.2);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--panel-border);
+            padding: 16px 20px;
+            text-align: center;
+            z-index: 100;
+            position: relative;
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        header p {
+            font-size: 0.9rem;
+            font-weight: 300;
+            color: var(--accent);
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+
+        #app-content {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .view-section {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease-in-out;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .view-section.active {
+            opacity: 1;
+            pointer-events: auto;
+            position: relative;
+        }
+
+        #view-map {
+            background-color: var(--bg-color);
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center center;
+            overflow: hidden;
+        }
+
+        #map-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: grab;
+            touch-action: none;
+        }
+        #map-container:active { cursor: grabbing; }
+
+        #campus-svg-v4 {
+            position: absolute;
+            transform-origin: 0 0;
+            will-change: transform;
+            transform: translateZ(0); 
+        }
+
+        .overlay-panel {
+            position: absolute;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            z-index: 20;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+
+        #map-controls { bottom: 24px; right: 24px; display: flex; flex-direction: column; overflow: hidden; }
+        .control-btn { background: transparent; border: none; color: var(--text-main); width: 48px; height: 48px; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; border-bottom: 1px solid var(--panel-border); }
+        .control-btn:last-child { border-bottom: none; }
+        .control-btn:hover { background: rgba(56, 189, 248, 0.15); color: #fff; }
+        .control-btn:active { background: rgba(56, 189, 248, 0.3); }
+
+        #legend { bottom: 24px; left: 24px; padding: 16px 20px; pointer-events: none; }
+        #legend h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; color: var(--accent); font-weight: 700; }
+        .legend-item { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 0.85rem; font-weight: 300; }
+        .legend-item:last-child { margin-bottom: 0; }
+        .lg-line, .lg-box { display: block; border-radius: 3px; }
+        .lg-line.main { width: 24px; height: 6px; background: #38bdf8; }
+        .lg-line.sec { width: 24px; height: 4px; background: #0284c7; }
+        .lg-box.bldg { width: 14px; height: 14px; background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #64748b; }
+        .lg-box.click { width: 14px; height: 14px; background: linear-gradient(135deg, #334155, #1e293b); border: 1px solid #38bdf8; }
+        .lg-box.special { width: 14px; height: 14px; background: linear-gradient(135deg, #166534, #052e16); border: 1px solid #4ade80; border-radius: 50%;}
+
+        #view-details {
+            overflow-y: auto;
+            background: var(--bg-color);
+            padding: 24px 20px 60px 20px;
+        }
+
+        .details-wrapper {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(56, 189, 248, 0.1);
+            color: var(--accent);
+            border: 1px solid var(--panel-border);
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 24px;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+        .btn-back:hover { background: var(--accent); color: #000; box-shadow: 0 0 10px rgba(56,189,248,0.5); }
+
+        .details-header h2 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid var(--panel-border);
+            padding-bottom: 16px;
+        }
+
+        .details-photo-wrapper {
+            width: 100%;
+            height: 400px;
+            background: #1e293b;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--panel-border);
+            margin-bottom: 32px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .details-photo-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .details-info-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+        }
+
+        @media (min-width: 768px) {
+            .details-info-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        .info-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--panel-border);
+            padding: 24px;
+            border-radius: 12px;
+        }
+
+        .info-card h3 {
+            color: var(--accent);
+            font-size: 1.2rem;
+            margin-bottom: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .info-card p {
+            color: var(--text-main);
+            line-height: 1.6;
+            font-weight: 300;
+            white-space: pre-line;
+        }
+
+        .room-directory {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        @media (min-width: 600px) {
+            .room-directory { grid-template-columns: 1fr 1fr; }
+        }
+
+        .room-card {
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: block;
+            text-decoration: none;
+        }
+
+        .room-card:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .room-card h4 {
+            color: #fff;
+            font-size: 1.1rem;
+            margin-bottom: 6px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .room-card h4::after {
+            content: "→";
+            color: var(--accent);
+            font-size: 1.2rem;
+            opacity: 0.5;
+            transition: opacity 0.2s ease;
+        }
+        .room-card:hover h4::after { opacity: 1; }
+
+        .room-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        footer {
+            background: rgba(15, 23, 42, 0.95);
+            border-top: 1px solid var(--panel-border);
+            padding: 16px 20px;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 300;
+            z-index: 100;
+        }
+
+        .credit-link {
+            color: #fff;
+            font-weight: 800;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            display: inline-block;
+            margin-left: 4px;
+        }
+        .credit-link:hover { background: var(--accent); border-color: var(--accent); color: #000; transform: translateY(-1px); }
+
+        @media (max-width: 600px) {
+            header h1 { font-size: 1.1rem; }
+            #legend { display: none; }
+            #map-controls { bottom: 20px; right: 20px; }
+            .control-btn { width: 42px; height: 42px; font-size: 20px; }
+            .details-photo-wrapper { height: 250px; }
+            .details-header h2 { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1 id="ui-college-name">YOUR COLLEGE NAME</h1>
+        <p>Interactive Campus Blueprint</p>
+    </header>
+
+    <main id="app-content">
+        
+        <!-- MAP VIEW -->
+        <section id="view-map" class="view-section active">
+            <div id="map-container">
+                <svg viewBox="0 0 1420 980" id="campus-svg-v4" xmlns="http://www.w3.org/2000/svg" style="background:transparent; font-family: var(--font-family);">
+                  <defs>
+                    <linearGradient id="groundGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0f172a" /><stop offset="100%" stop-color="#020617" /></linearGradient>
+                    <linearGradient id="baseGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e293b" /><stop offset="100%" stop-color="#0f172a" /></linearGradient>
+                    <linearGradient id="roomGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#334155" /><stop offset="100%" stop-color="#1e293b" /></linearGradient>
+                    <linearGradient id="roomAltGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a8a" /><stop offset="100%" stop-color="#172554" /></linearGradient>
+                    <linearGradient id="gardenGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#166534" /><stop offset="100%" stop-color="#052e16" /></linearGradient>
+                    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed" /><stop offset="100%" stop-color="#4c1d95" /></linearGradient>
+                  </defs>
+                  <style>
+                    .ground { fill: url(#groundGrad); stroke: #1e293b; stroke-width: 4; }
+                    .road-primary { fill: none; stroke: #38bdf8; stroke-width: 18; stroke-linecap: round; stroke-linejoin: round; }
+                    .road-secondary { fill: none; stroke: #0284c7; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+                    .road-outer { fill: none; stroke: #f59e0b; stroke-width: 22; stroke-linecap: round; stroke-linejoin: round; }
+                    .road-footpath { fill: none; stroke: #7dd3fc; stroke-width: 6; stroke-linecap: round; stroke-dasharray: 6 6; }
+                    .bldg-container { fill: url(#baseGrad); stroke: #475569; stroke-width: 2; }
+                    
+                    @keyframes hardware-pulse { 0% { opacity: 0.85; stroke-width: 1px; } 100% { opacity: 1; stroke-width: 2px; } }
+                    .room-node { cursor: pointer; transition: all 0.2s ease; animation: hardware-pulse 2s infinite alternate; will-change: opacity; }
+                    .room-node:hover { opacity: 1; stroke: #bae6fd !important; stroke-width: 3px !important; animation: none; }
+                    
+                    .room-box { fill: url(#roomGrad); stroke: #38bdf8; stroke-width: 1; }
+                    .room-box-alt { fill: url(#roomAltGrad); stroke: #60a5fa; stroke-width: 1; }
+                    .label-title { fill: #7dd3fc; font-size: 11px; font-weight: 800; text-anchor: middle; letter-spacing: 2px; }
+                    .label-room { fill: #ffffff; font-size: 10px; font-weight: 500; text-anchor: middle; pointer-events: none; }
+                    .label-sub { fill: #94a3b8; font-size: 8px; font-weight: 300; text-anchor: middle; pointer-events: none; }
+                    .garden { fill: url(#gardenGrad); stroke: #4ade80; stroke-width: 2; }
+                    .volleyball { fill: #854d0e; stroke: #facc15; stroke-width: 2; }
+                    .statue { fill: #eab308; stroke: #fde047; stroke-width: 2; }
+                    .water-point { fill: #10b981; stroke: #6ee7b7; stroke-width: 2; }
+                    .gate { fill: #dc2626; stroke: #f87171; stroke-width: 2; }
+                    .stage { fill: url(#purpleGrad); stroke: #c084fc; stroke-width: 2; }
+                    .parking { fill: #d97706; stroke: #fbbf24; stroke-width: 2; }
+                  </style>
+
+                  <rect x="20" y="20" width="1380" height="940" rx="20" class="ground" />
+                  <path d="M 1200 950 L 1200 25 L 25 25" class="road-outer" />
+                  <text x="1215" y="200" class="label-sub" fill="#fbbf24" font-weight="700" transform="rotate(90 1215 200)">OUTSIDE MAIN ROAD</text>
+
+                  <g id="malati-devi-hostel">
+                    <rect x="1235" y="430" width="150" height="150" rx="8" class="bldg-container" />
+                    <rect x="1245" y="440" width="130" height="130" class="room-box-alt room-node" data-room="malati-devi" />
+                    <text x="1310" y="500" class="label-room">Malati Devi</text>
+                    <text x="1310" y="515" class="label-room">Girls Hostel</text>
+                    <text x="1310" y="535" class="label-sub">(Opposite Main Gate)</text>
+                  </g>
+                  <g id="sn-hostel-group">
+                    <rect x="30" y="40" width="220" height="320" rx="8" class="bldg-container" />
+                    <rect x="40" y="70" width="200" height="270" class="room-box-alt room-node" data-room="sn-hostel" />
+                    <text x="140" y="195" class="label-room" font-size="13px" font-weight="700">SN Boys Hostel</text>
+                  </g>
+                  <g id="playground-group">
+                    <rect x="30" y="380" width="220" height="420" rx="8" class="room-node" data-room="playground" fill="url(#gardenGrad)" stroke="#22c55e" stroke-width="2" />
+                    <text x="140" y="580" class="label-room" font-size="15px" font-weight="800" letter-spacing="1px">PLAYGROUND</text>
+                  </g>
+
+                  <path d="M 270 30 L 270 820" class="road-primary" />
+                  <path d="M 1190 505 L 920 505" class="road-primary" />
+                  <circle cx="780" cy="505" r="80" class="road-secondary" />
+                  <path d="M 700 505 L 500 505 L 500 180 L 1020 180 M 1020 180 L 1020 140" class="road-secondary" />
+                  <path d="M 835 445 C 880 375, 970 375, 970 325" class="road-secondary" />
+                  <path d="M 780 585 L 780 660 L 600 660 L 600 800" class="road-secondary" />
+                  <path d="M 400 470 L 400 680" class="road-footpath" />
+                  <path d="M 500 180 L 500 130" class="road-footpath" />
+                  <path d="M 620 180 L 620 130" class="road-footpath" />
+                  <path d="M 760 180 L 760 130" class="road-footpath" />
+                  <path d="M 270 660 L 320 660" class="road-footpath" />
+
+                  <circle cx="780" cy="505" r="60" class="garden room-node" data-room="round-garden" />
+                  <text x="780" y="500" class="label-room" font-weight="700">Round Garden</text>
+                  <circle cx="875" cy="505" r="20" class="statue room-node" data-room="statue" />
+                  <text x="875" y="509" class="label-room" font-size="8px" fill="#000" font-weight="800">Statue</text>
+                  <rect x="650" y="270" width="160" height="90" rx="6" class="volleyball room-node" data-room="volleyball-court" />
+                  <text x="730" y="315" class="label-room" fill="#fef08a" font-weight="700">Volleyball Court</text>
+
+                  <g id="l-shaped-library">
+                    <path d="M 330 40 L 910 40 L 910 130 L 460 130 L 460 250 L 330 250 Z" class="bldg-container" />
+                    <rect x="470" y="68" width="135" height="55" class="room-box-alt room-node" data-room="lib-main" />
+                    <text x="537" y="100" class="label-room">Main Library</text>
+                    <rect x="612" y="68" width="115" height="55" class="room-box room-node" data-room="lib-office" />
+                    <text x="669" y="100" class="label-room">Library Office</text>
+                    <rect x="734" y="68" width="166" height="55" class="room-box-alt room-node" data-room="lib-reading" />
+                    <text x="817" y="100" class="label-room">Library Reading Room</text>
+                    <rect x="340" y="68" width="110" height="80" class="room-box room-node" data-room="old-science-lab" />
+                    <text x="395" y="105" class="label-room">Old Science Lab</text>
+                    <rect x="340" y="155" width="110" height="85" class="room-box room-node" data-room="old-lab-office" />
+                    <text x="395" y="195" class="label-room">Science Section Office</text>
+                  </g>
+
+                  <g id="geo-woodwork-block">
+                    <rect x="330" y="260" width="140" height="210" rx="6" class="bldg-container" />
+                    <rect x="338" y="272" width="124" height="50" class="room-box room-node" data-room="geography-room" />
+                    <text x="400" y="302" class="label-room">Geography Method Room</text>
+                    <rect x="338" y="327" width="124" height="55" class="room-box-alt room-node" data-room="woodwork-section" />
+                    <text x="400" y="357" class="label-room">Woodwork Section</text>
+                    <rect x="338" y="387" width="124" height="73" class="room-box room-node" data-room="hall-1" />
+                    <text x="400" y="427" class="label-room">Hall No. 1</text>
+                  </g>
+
+                  <rect x="490" y="385" width="100" height="35" class="stage room-node" data-room="stage-1" />
+                  <text x="540" y="407" class="label-room">Stage No. 1</text>
+                  <g id="arts-pe-arc">
+                    <path d="M 490 430 L 550 430 A 45 45 0 0 1 550 520 L 490 520 Z" class="room-node" data-room="arts-pe-room" fill="url(#purpleGrad)" stroke="#c084fc" stroke-width="2" />
+                    <text x="520" y="470" class="label-room" font-size="9px">Arts &amp; P.E.</text>
+                    <text x="520" y="482" class="label-sub" fill="#e9d5ff">Department Office</text>
+                  </g>
+
+                  <rect x="285" y="490" width="120" height="85" rx="6" class="parking room-node" data-room="parking" />
+                  <text x="345" y="535" class="label-room">Cycle Stand &amp; Parking</text>
+                  <rect x="285" y="585" width="120" height="40" class="stage room-node" data-room="stage-2" />
+                  <text x="345" y="610" class="label-room">Stage No. 2</text>
+
+                  <g id="med-block">
+                    <rect x="950" y="40" width="210" height="100" rx="8" class="bldg-container" />
+                    <rect x="958" y="52" width="194" height="38" class="room-box room-node" data-room="med-gf" />
+                    <text x="1055" y="75" class="label-room">M.Ed Ground Floor</text>
+                    <rect x="958" y="94" width="194" height="38" class="room-box-alt room-node" data-room="med-1f" />
+                    <text x="1055" y="117" class="label-room">M.Ed 1st Floor</text>
+                  </g>
+
+                  <g id="ignou-fineart">
+                    <rect x="950" y="215" width="210" height="110" rx="8" class="bldg-container" />
+                    <rect x="958" y="230" width="92" height="85" class="room-box-alt room-node" data-room="fine-art-section" />
+                    <text x="1004" y="275" class="label-room">Fine Art Section</text>
+                    <rect x="1056" y="230" width="96" height="85" class="room-box room-node" data-room="ignou-center" />
+                    <text x="1104" y="275" class="label-room">IGNOU Center</text>
+                  </g>
+
+                  <rect x="1175" y="465" width="25" height="80" rx="4" class="gate room-node" data-room="main-gate" />
+                  <text x="1187" y="505" class="label-room" transform="rotate(-90 1187 505)" font-weight="800" letter-spacing="1px">MAIN GATE</text>
+
+                  <circle cx="750" cy="660" r="16" class="water-point room-node" data-room="water-point" />
+                  <text x="750" y="638" class="label-room" fill="#10b981">Drinking Water Station</text>
+
+                  <g id="main-building">
+                    <rect x="660" y="680" width="330" height="130" rx="8" class="bldg-container" />
+                    <text x="825" y="696" class="label-title">OLD BUILDING (MAIN)</text>
+                    <rect x="670" y="705" width="310" height="45" class="room-box room-node" data-room="main-bldg-gf" />
+                    <text x="825" y="732" class="label-room">Old Building — Ground Floor</text>
+                    <rect x="670" y="755" width="310" height="45" class="room-box-alt room-node" data-room="main-bldg-1f" />
+                    <text x="825" y="782" class="label-room">Old Building — 1st Floor</text>
+                  </g>
+
+                  <g id="new-building">
+                    <rect x="320" y="680" width="330" height="130" rx="8" class="bldg-container" />
+                    <text x="485" y="696" class="label-title">NEW BUILDING</text>
+                    <rect x="330" y="705" width="310" height="45" class="room-box room-node" data-room="new-bldg-gf" />
+                    <text x="485" y="732" class="label-room">New Building — Ground Floor</text>
+                    <rect x="330" y="755" width="310" height="45" class="room-box-alt room-node" data-room="new-bldg-1f" />
+                    <text x="485" y="782" class="label-room">New Building — 1st Floor</text>
+                  </g>
+
+                  <g id="staff-quarters">
+                    <rect x="300" y="840" width="710" height="80" rx="8" class="bldg-container" />
+                    <rect x="310" y="850" width="690" height="60" class="room-box room-node" data-room="staff-quarters" />
+                    <text x="655" y="885" class="label-room" font-size="14px" font-weight="700" letter-spacing="1px">STAFF QUARTERS</text>
+                  </g>
+                </svg>
+            </div>
+
+            <!-- UI CONTROLS -->
+            <div id="legend" class="overlay-panel">
+                <h4>Legend</h4>
+                <div class="legend-item"><span class="lg-line main"></span><span>Main / Wide Road</span></div>
+                <div class="legend-item"><span class="lg-line sec"></span><span>Secondary Road</span></div>
+                <div class="legend-item"><span class="lg-box bldg"></span><span>College Block</span></div>
+                <div class="legend-item"><span class="lg-box click"></span><span>Clickable Floor/Block</span></div>
+                <div class="legend-item"><span class="lg-box special"></span><span>Activity Area</span></div>
+            </div>
+
+            <div id="map-controls" class="overlay-panel">
+                <button class="control-btn" id="btn-zoom-in" title="Zoom In">&#xFF0B;</button>
+                <button class="control-btn" id="btn-zoom-out" title="Zoom Out">&#xFF0D;</button>
+                <button class="control-btn" id="btn-reset" title="Reset View">&#x21BA;</button>
+                <button class="control-btn" id="btn-fit" title="Fit to Screen">&#x26F6;</button>
+            </div>
+        </section>
+
+        <!-- DETAILS VIEW -->
+        <section id="view-details" class="view-section">
+            <div class="details-wrapper">
+                <a href="#map" id="btn-back" class="btn-back">&#8592; Back to Campus Map</a>
+                
+                <div class="details-header">
+                    <h2 id="details-title">Title</h2>
+                </div>
+                
+                <div class="details-photo-wrapper">
+                    <img id="details-image" src="" alt="Photograph">
+                </div>
+
+                <div class="details-info-grid">
+                    <div class="info-card">
+                        <h3>About</h3>
+                        <p id="details-about">Description goes here.</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>Departments</h3>
+                        <p id="details-departments">Department list goes here.</p>
+                    </div>
+                    <div class="info-card" style="grid-column: 1 / -1;">
+                        <h3>Facilities</h3>
+                        <p id="details-facilities">Facilities list goes here.</p>
+                    </div>
+
+                    <!-- DYNAMIC STRUCTURE DIRECTORY -->
+                    <div class="info-card" id="details-structure-card" style="grid-column: 1 / -1; display: none;">
+                        <h3>Internal Structure & Classrooms</h3>
+                        <div class="room-directory" id="details-structure-list"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- COMMON FOOTER -->
+    <footer>
+        Map is coded / designed by <a id="credit-author" class="credit-link" target="_blank" href="#">Priyabrat</a>
+    </footer>
+
+    <!-- ==========================================
+         JAVASCRIPT LOGIC & CONFIGURATION
+         ========================================== -->
+    <script>
+        /* ---------------------------------------------------------
+           1. CENTRAL WEBSITE CONFIGURATION
+           --------------------------------------------------------- */
+        
+        const SITE_CONFIG = {
+            collegeName: "YOUR COLLEGE NAME",
+            instagramLink: "PUT_YOUR_INSTAGRAM_LINK_HERE"
+        };
+
+        // ---------------------------------------------------------
+        // ALL BUILDING & CLASSROOM DATA
+        // Fully updated with the precise descriptions provided by the user.
+        // ---------------------------------------------------------
+        const BUILDINGS = {
+            
+            // --- 1. M.Ed Block ---
+            "med-gf": {
+                title: "M.Ed 1st Year Classroom (Ground Floor)",
+                image: "./assets/images/med-gf.jpg",
+                about: "Air-conditioned lecture hall dedicated to daily foundational M.Ed theory classes, group presentations, and academic discussions.",
+                departments: "Postgraduate Education (M.Ed)",
+                facilities: "Air-conditioning, Presentation equipment, Interactive seating"
+            },
+            "med-1f": {
+                title: "M.Ed 2nd Year Classroom (First Floor)",
+                image: "./assets/images/med-1f.jpg",
+                about: "Air-conditioned classroom designed for postgraduate pedagogy instruction, dissertation seminars, and educational research work.",
+                departments: "Postgraduate Education (M.Ed)",
+                facilities: "Air-conditioning, Seminar layout, Research desks"
+            },
+
+            // --- 2. Library & Old Science Lab Complex ---
+            "lib-main": {
+                title: "Main Library",
+                image: "./assets/images/lib-main.jpg",
+                about: "Primary academic repository providing B.Ed and M.Ed reference textbooks, educational research journals, curriculum guides, and daily book lending services.",
+                departments: "Library & Information Science",
+                facilities: "Reference sections, Lending services, Journal archives"
+            },
+            "lib-reading": {
+                title: "Library Reading Room",
+                image: "./assets/images/lib-reading.jpg",
+                about: "Quiet study hall equipped with seating and reading desks for self-study, exam preparation, and reference note-taking.",
+                departments: "Student Support",
+                facilities: "Quiet zone, Reading desks, Study lamps"
+            },
+            "lib-office": {
+                title: "Library Office",
+                image: "./assets/images/lib-office.jpg",
+                about: "Central administrative counter positioned between the reading room and main library for catalog management, library card issuance, and book transactions.",
+                departments: "Library Administration",
+                facilities: "Catalog terminals, Issue/Return desk, Staff records"
+            },
+            "old-science-lab": {
+                title: "Old Science Lab",
+                image: "./assets/images/old-science-lab.jpg",
+                about: "Practical workspace utilized for hands-on foundational science experiments, apparatus demonstrations, and basic science TLM (Teaching Learning Material) preparation.",
+                departments: "Foundational Science",
+                facilities: "Workbenches, Historical apparatus, Demonstration tables"
+            },
+            "old-lab-office": {
+                title: "Science Section Office",
+                image: "./assets/images/old-lab-office.jpg",
+                about: "Departmental administrative office located below the old science lab for managing laboratory equipment registers, maintenance schedules, and practical sessions.",
+                departments: "Science Faculty",
+                facilities: "Equipment registers, Maintenance logs, Staff seating"
+            },
+
+            // --- 3. Geography & Woodwork Block ---
+            "geography-room": {
+                title: "Geography Method Room",
+                image: "./assets/images/geography-room.jpg",
+                about: "Specialized method classroom equipped with physical/topographical maps, globes, survey instruments, and pedagogical charts.",
+                departments: "Geography & Earth Sciences",
+                facilities: "Topographical maps, Globes, Survey instruments, Wall charts"
+            },
+            "woodwork-section": {
+                title: "Woodwork Section (Lab & Theory Room)",
+                image: "./assets/images/woodwork-section.jpg",
+                about: "Work experience workshop divided into a theoretical instruction area and a manual craft lab for carpentry practice, wooden teaching aids, and model fabrication.",
+                departments: "Vocational & Work Education",
+                facilities: "Carpentry benches, Safety gear, Model fabrication tools"
+            },
+            "hall-1": {
+                title: "Hall No. 1",
+                image: "./assets/images/hall-1.jpg",
+                about: "Multipurpose academic hall designed for batch-wide orientation sessions, workshops, interactive micro-teaching practice, and combined guest lectures.",
+                departments: "All Academic Departments",
+                facilities: "Large capacity seating, Presentation stage, Audio-visual setup"
+            },
+
+            // --- 4. Performing Arts, Fine Art & Physical Education Room ---
+            "arts-pe-room": {
+                title: "Arts & P.E. Department Hub",
+                image: "./assets/images/arts-pe-room.jpg",
+                about: "Multi-use departmental facility serving as faculty offices, preparation room for arts/crafts TLMs, drama/music rehearsal space, and storage for physical education/sports equipment.",
+                departments: "Performing Arts\nPhysical Education",
+                facilities: "TLM preparation area, Drama/Music space, Sports equipment storage"
+            },
+
+            // --- 5. IGNOU Center & Fine Art Block ---
+            "fine-art-section": {
+                title: "Fine Art Section",
+                image: "./assets/images/fine-art-section.jpg",
+                about: "Practical creative studio dedicated to drawing, chart making, painting, and visual arts instructional materials preparation.",
+                departments: "Visual & Fine Arts",
+                facilities: "Drawing desks, Painting easels, Craft supplies"
+            },
+            "ignou-center": {
+                title: "IGNOU Study Center",
+                image: "./assets/images/ignou-center.jpg",
+                about: "Administrative office managing IGNOU distance education programs, weekend counseling sessions, assignment submissions, and student support.",
+                departments: "Distance Education",
+                facilities: "Counseling desks, Assignment collection bins, Student helpdesk"
+            },
+
+            // --- 6. Main Building (North Block / Old Building) ---
+            "main-bldg-gf": {
+                title: "Main Building — Ground Floor",
+                image: "./assets/images/main-bldg-gf.jpg",
+                about: "The administrative and core hub of the campus containing essential offices and staff rooms.",
+                departments: "Administration\nFaculty",
+                facilities: "Administrative Counters, Security, Core Offices",
+                structure: [
+                    { 
+                        id: "principal-office", 
+                        title: "Principal Office", 
+                        shortDetails: "Executive chamber for administrative leadership.", 
+                        image: "./assets/images/principal-office.jpg",
+                        about: "Executive chamber for administrative leadership, institutional governance, and official meetings.",
+                        departments: "Executive Administration",
+                        facilities: "Conference table, Executive Desk, Institutional Archives"
+                    },
+                    { 
+                        id: "confidential-room", 
+                        title: "Confidential Room", 
+                        shortDetails: "High-security record room.",
+                        image: "./assets/images/confidential-room.jpg",
+                        about: "High-security record room for confidential academic files and examination documentation.",
+                        departments: "Examination Board",
+                        facilities: "Secure file cabinets, Restricted access protocol"
+                    },
+                    { 
+                        id: "admin-office", 
+                        title: "Administration Office", 
+                        shortDetails: "Admissions, fees, and inquiries.",
+                        image: "./assets/images/admin-office.jpg",
+                        about: "Central office handling admissions, fee collection, scholarships, and student inquiries.",
+                        departments: "Administration & Accounts",
+                        facilities: "Student service counters, Cash desk, Digital records"
+                    },
+                    { 
+                        id: "waiting-hall", 
+                        title: "Waiting Hall", 
+                        shortDetails: "Reception area for visitors.",
+                        image: "./assets/images/waiting-hall.jpg",
+                        about: "Reception and seating area located right off the main entrance for visitors and parents.",
+                        departments: "Public Relations",
+                        facilities: "Seating arrangements, Help desk, Notice boards"
+                    },
+                    { 
+                        id: "staff-room", 
+                        title: "Staff Room", 
+                        shortDetails: "Faculty workstation and planning space.",
+                        image: "./assets/images/staff-room.jpg",
+                        about: "Faculty workstation and planning space spanning the corridor connecting into the New Building.",
+                        departments: "All Academic Faculties",
+                        facilities: "Individual workstations, Staff lockers, Preparation area"
+                    },
+                    { 
+                        id: "gf-washrooms", 
+                        title: "Washrooms (GF)", 
+                        shortDetails: "Restroom facilities for men and women.",
+                        image: "./assets/images/gf-washrooms.jpg",
+                        about: "Separate restroom facilities for men and women beside the central staircase.",
+                        departments: "Campus Maintenance",
+                        facilities: "Separate male/female sections, Running water"
+                    }
+                ]
+            },
+            "main-bldg-1f": {
+                title: "Main Building — First Floor",
+                image: "./assets/images/main-bldg-1f.jpg",
+                about: "Upper level of the old building focusing on large gatherings and faculty meetings.",
+                departments: "Institutional Governance\nEvent Management",
+                facilities: "Conference Setup, Outdoor Balcony",
+                structure: [
+                    { 
+                        id: "multipurpose-hall", 
+                        title: "Multipurpose Hall", 
+                        shortDetails: "Large hall for student gatherings and seminars.",
+                        image: "./assets/images/multipurpose-hall.jpg",
+                        about: "Large upper-floor hall for student gatherings, seminars, and academic workshops.",
+                        departments: "Academics & Extracurriculars",
+                        facilities: "Auditorium seating, PA System, Projector screen"
+                    },
+                    { 
+                        id: "conference-hall", 
+                        title: "Conference Hall", 
+                        shortDetails: "Meeting room for faculty board reviews.",
+                        image: "./assets/images/conference-hall.jpg",
+                        about: "Meeting room equipped for faculty board reviews and institutional planning.",
+                        departments: "Administration",
+                        facilities: "Round-table setup, Presentation screens, AC"
+                    },
+                    { 
+                        id: "balcony-washrooms", 
+                        title: "Balcony & Washrooms", 
+                        shortDetails: "Outdoor terrace and upper restrooms.",
+                        image: "./assets/images/balcony-washrooms.jpg",
+                        about: "Outdoor-viewing open terrace overlooking the front grounds, alongside upper-floor separate washrooms.",
+                        departments: "Campus Maintenance",
+                        facilities: "Viewing gallery, Sanitary facilities"
+                    }
+                ]
+            },
+
+            // --- 7. New Building (Academic & Laboratory Wing) ---
+            "new-bldg-gf": {
+                title: "New Building — Ground Floor",
+                image: "./assets/images/new-bldg-gf.jpg",
+                about: "Modern academic block containing key classrooms and primary science laboratories.",
+                departments: "Sciences\nMathematics\nB.Ed & M.Ed",
+                facilities: "Laboratories, Corridors, Smart Classrooms",
+                structure: [
+                    { 
+                        id: "classroom-1", 
+                        title: "Classroom 1 (B.Ed 2nd Yr, Sec-B)", 
+                        shortDetails: "Primary methodology lecture hall.",
+                        image: "./assets/images/classroom-1.jpg",
+                        about: "Primary methodology lecture hall running along the front corridor.",
+                        departments: "B.Ed Education",
+                        facilities: "Desks, Whiteboard, Well-ventilated"
+                    },
+                    { 
+                        id: "classroom-2", 
+                        title: "Classroom 2 (M.Ed 2nd Yr)", 
+                        shortDetails: "Postgraduate seminar classroom.",
+                        image: "./assets/images/classroom-2.jpg",
+                        about: "Postgraduate classroom specifically designed for seminars and advanced education classes.",
+                        departments: "M.Ed Education",
+                        facilities: "Seminar layout, Audio-visual support"
+                    },
+                    { 
+                        id: "math-lab", 
+                        title: "Math Lab (Classroom 3)", 
+                        shortDetails: "Mathematics pedagogy laboratory.",
+                        image: "./assets/images/math-lab.jpg",
+                        about: "Mathematics pedagogy lab with geometric kits, calculation tools, and 3D manipulative models.",
+                        departments: "Mathematics",
+                        facilities: "Geometric kits, 3D Manipulatives, Calculation tools"
+                    },
+                    { 
+                        id: "chemistry-lab", 
+                        title: "Chemistry Lab", 
+                        shortDetails: "Wet laboratory for chemical experiments.",
+                        image: "./assets/images/chemistry-lab.jpg",
+                        about: "Wet laboratory fitted with chemical reagents, titration counters, and safety apparatus.",
+                        departments: "Chemistry",
+                        facilities: "Titration counters, Fume hoods, Reagent storage"
+                    },
+                    { 
+                        id: "physics-lab", 
+                        title: "Physics Lab", 
+                        shortDetails: "Laboratory for mechanics and optics.",
+                        image: "./assets/images/physics-lab.jpg",
+                        about: "Practical lab near the entrance gate equipped with mechanics kits, optical benches, and electrical experiment tools.",
+                        departments: "Physics",
+                        facilities: "Optical benches, Electrical kits, Mechanics apparatus"
+                    },
+                    { 
+                        id: "new-gf-washrooms", 
+                        title: "Washrooms (Left Wing)", 
+                        shortDetails: "Dedicated restrooms on left corridor.",
+                        image: "./assets/images/new-gf-washrooms.jpg",
+                        about: "Dedicated separate restrooms for boys and girls located on the left corridor wing.",
+                        departments: "Campus Maintenance",
+                        facilities: "Clean water, Hygienic stalls"
+                    }
+                ]
+            },
+            "new-bldg-1f": {
+                title: "New Building — First Floor",
+                image: "./assets/images/new-bldg-1f.jpg",
+                about: "Upper level housing advanced science labs, ICT facilities, and quality assurance offices.",
+                departments: "Biological Sciences\nICT\nNAAC Quality",
+                facilities: "Specialized Labs, Evaluation offices",
+                structure: [
+                    { 
+                        id: "classroom-4", 
+                        title: "Classroom 4 (B.Ed 2nd Yr, Sec-A)", 
+                        shortDetails: "Foundation theory & micro-teaching.",
+                        image: "./assets/images/classroom-4.jpg",
+                        about: "Upper classroom heavily utilized for foundation theory classes and micro-teaching practice.",
+                        departments: "B.Ed Education",
+                        facilities: "Micro-teaching observation setup, Student desks"
+                    },
+                    { 
+                        id: "classroom-5", 
+                        title: "Classroom 5 (B.Ed 2nd Yr, Sec-C)", 
+                        shortDetails: "Standard lecture room near stairs.",
+                        image: "./assets/images/classroom-5.jpg",
+                        about: "Standard lecture room situated directly across from the main staircase.",
+                        departments: "B.Ed Education",
+                        facilities: "Lecture podium, Bright lighting"
+                    },
+                    { 
+                        id: "iqac-room", 
+                        title: "IQAC Room", 
+                        shortDetails: "Internal Quality Assurance Cell office.",
+                        image: "./assets/images/iqac-room.jpg",
+                        about: "Dedicated office for NAAC documentation, institutional auditing, and quality assurance planning.",
+                        departments: "Quality Assurance",
+                        facilities: "Document archives, Meeting table, Computer workstations"
+                    },
+                    { 
+                        id: "zoology-lab", 
+                        title: "Zoology Lab", 
+                        shortDetails: "Microscopes and animal specimens.",
+                        image: "./assets/images/zoology-lab.jpg",
+                        about: "Specimen lab equipped with compound microscopes, anatomical charts, and preserved animal specimens.",
+                        departments: "Zoology & Biological Sciences",
+                        facilities: "Compound microscopes, Preserved specimens, Anatomical charts"
+                    },
+                    { 
+                        id: "botany-lab", 
+                        title: "Botany Lab", 
+                        shortDetails: "Plant science laboratory.",
+                        image: "./assets/images/botany-lab.jpg",
+                        about: "Plant science lab containing herbarium sets, slide tools, and highly detailed botanical models.",
+                        departments: "Botany",
+                        facilities: "Herbarium sets, Slide prep tools, Botanical models"
+                    },
+                    { 
+                        id: "ict-lab", 
+                        title: "ICT Lab", 
+                        shortDetails: "Computer and technology center.",
+                        image: "./assets/images/ict-lab.jpg",
+                        about: "Computer center fitted with desktop PCs, high-speed internet, and audio-visual educational technology tools.",
+                        departments: "Information & Communication Technology",
+                        facilities: "Desktop PCs, Internet access, Ed-Tech tools"
+                    },
+                    { 
+                        id: "new-1f-washrooms", 
+                        title: "Washrooms (Upper Level)", 
+                        shortDetails: "Restrooms for upper floor students.",
+                        image: "./assets/images/new-1f-washrooms.jpg",
+                        about: "Upper-level separate restrooms for boys and girls.",
+                        departments: "Campus Maintenance",
+                        facilities: "Sanitary bins, Running water"
+                    }
+                ]
+            },
+
+            // --- 8. Campus Landmarks, Utilities & Stages ---
+            "stage-1": { title: "Stage No. 1", image: "./assets/images/stage-1.jpg", about: "Covered, roof-protected stage located North of the Arts & P.E. room for formal cultural performances and college events.", departments: "Student Council & Cultural Committe", facilities: "Covered roof, Elevated platform, Lighting rigs" },
+            "stage-2": { title: "Stage No. 2", image: "./assets/images/stage-2.jpg", about: "Open-ground auxiliary stage situated below the cycle stand beside the playground road for athletic meets and sports day prize distributions.", departments: "Physical Education", facilities: "Open elevated platform" },
+            "parking": { title: "Cycle Stand & Parking", image: "./assets/images/parking.jpg", about: "Covered parking zone situated on the western perimeter for two-wheelers, bicycles, and staff/visitor vehicles.", departments: "Campus Security", facilities: "Covered cycle stands, Designated vehicle spots" },
+            "round-garden": { title: "Round Garden", image: "./assets/images/round-garden.jpg", about: "Central circular landscaped garden featuring ornamental plants and the commemorative statue of Shri Nabakrushna Choudhury.", departments: "Campus Beautification", facilities: "Walking path, Floral displays, Benches" },
+            "statue": { title: "College Statue", image: "./assets/images/statue.jpg", about: "Commemorative statue of Shri Nabakrushna Choudhury located in the center of the Round Garden.", departments: "N/A", facilities: "Monument plaque" },
+            "volleyball-court": { title: "Volleyball Court", image: "./assets/images/volleyball-court.jpg", about: "Outdoor sports court located between the Round Garden and the Library complex.", departments: "Physical Education", facilities: "Sand/Hard court, Net, Play markings" },
+            "water-point": { title: "Drinking Water & Handwash Point", image: "./assets/images/water-point.jpg", about: "Fresh drinking water and hygiene station positioned at the pathway bend right outside the Main Building entrance.", departments: "Maintenance", facilities: "RO Purifier, Multiple taps, Washbasins" },
+            "main-gate": { title: "Main Gate", image: "./assets/images/main-gate.jpg", about: "Official security-controlled entrance/exit along the eastern boundary connecting the campus to the outer road.", departments: "Campus Security", facilities: "Security cabin, Boom barrier, 24/7 Guard" },
+
+            // --- 9. Residential & External Blocks ---
+            "sn-hostel": { title: "SN Boys Hostel", image: "./assets/images/sn-hostel.jpg", about: "On-campus boys' residential complex providing boarder lodging, study rooms, and mess dining.", departments: "Hostel Administration", facilities: "Rooms, Mess, Common TV Room, Wi-Fi" },
+            "playground": { title: "Playground", image: "./assets/images/playground.jpg", about: "Large athletic field for football, cricket, sports meets, and physical education drills.", departments: "Physical Education", facilities: "Cricket pitch, Football field, Running track" },
+            "staff-quarters": { title: "Staff Quarters", image: "./assets/images/staff-quarters.jpg", about: "Extended residential block running along the southern campus perimeter below the Main and New Buildings for faculty and staff housing.", departments: "Human Resources", facilities: "Family accommodation, Private parking" },
+            "malati-devi": { title: "Malati Devi Girls Hostel", image: "./assets/images/malati-devi.jpg", about: "Women's residential hall located directly opposite the Main Gate on the outer road, providing secure boarding and mess facilities for female trainees.", departments: "Hostel Administration", facilities: "Rooms, Mess, 24/7 Security, Recreation Room" }
+        };
+
+        /* ---------------------------------------------------------
+           2. SYSTEM LOGIC (SPA ROUTER & MAP ENGINE)
+           --------------------------------------------------------- */
+        
+        document.getElementById('ui-college-name').textContent = SITE_CONFIG.collegeName;
+        document.title = `${SITE_CONFIG.collegeName} | Campus Map`;
+        
+        const creditLink = document.getElementById('credit-author');
+        if (SITE_CONFIG.instagramLink !== "PUT_YOUR_INSTAGRAM_LINK_HERE") {
+            creditLink.href = SITE_CONFIG.instagramLink;
+        } else {
+            creditLink.href = "#";
+        }
+
+        const viewMap = document.getElementById('view-map');
+        const viewDetails = document.getElementById('view-details');
+
+        function setupImageFallback(imgEl, requiredPath) {
+            imgEl.onerror = function() {
+                this.onerror = null; 
+                this.src = `data:image/svg+xml;utf8,<svg width='100%' height='100%' viewBox='0 0 800 400' xmlns='http://www.w3.org/2000/svg'><rect width='100%' height='100%' fill='%231e293b'/><text x='50%' y='45%' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-family='sans-serif' font-size='24' font-weight='bold'>Photograph Not Uploaded Yet</text><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='%2338bdf8' font-family='sans-serif' font-size='16'>Please upload to: ${requiredPath}</text></svg>`;
+            };
+        }
+
+        function handleRoute() {
+            const hash = window.location.hash;
+
+            if (hash.startsWith('#building/')) {
+                // Show Main Building Page
+                const bldgId = hash.replace('#building/', '');
+                const bldgData = BUILDINGS[bldgId];
+
+                if (bldgData) {
+                    document.getElementById('details-title').textContent = bldgData.title;
+                    document.getElementById('details-about').textContent = bldgData.about;
+                    document.getElementById('details-departments').textContent = bldgData.departments;
+                    document.getElementById('details-facilities').textContent = bldgData.facilities;
+
+                    const imgEl = document.getElementById('details-image');
+                    setupImageFallback(imgEl, bldgData.image);
+                    imgEl.src = bldgData.image; 
+
+                    const backBtn = document.getElementById('btn-back');
+                    backBtn.innerHTML = '&#8592; Back to Campus Map';
+                    backBtn.href = '#map';
+
+                    const structureCard = document.getElementById('details-structure-card');
+                    const structureList = document.getElementById('details-structure-list');
+                    
+                    if (bldgData.structure && bldgData.structure.length > 0) {
+                        structureList.innerHTML = ''; 
+                        bldgData.structure.forEach(item => {
+                            const roomLink = document.createElement('a');
+                            roomLink.className = 'room-card';
+                            roomLink.href = `#room/${bldgId}/${item.id}`; 
+                            roomLink.innerHTML = `<h4>${item.title}</h4><p>${item.shortDetails}</p>`;
+                            structureList.appendChild(roomLink);
+                        });
+                        structureCard.style.display = 'block';
+                    } else {
+                        structureCard.style.display = 'none';
+                    }
+
+                    viewMap.classList.remove('active');
+                    viewDetails.classList.add('active');
+                    window.scrollTo(0,0);
+                } else {
+                    window.location.hash = '#map';
+                }
+            } else if (hash.startsWith('#room/')) {
+                // Show Specific Room Inside a Building
+                const parts = hash.split('/');
+                const bldgId = parts[1];
+                const roomId = parts[2];
+                const bldgData = BUILDINGS[bldgId];
+                const roomData = bldgData?.structure?.find(r => r.id === roomId);
+
+                if (roomData) {
+                    document.getElementById('details-title').textContent = roomData.title;
+                    document.getElementById('details-about').textContent = roomData.about;
+                    document.getElementById('details-departments').textContent = roomData.departments;
+                    document.getElementById('details-facilities').textContent = roomData.facilities;
+
+                    const imgEl = document.getElementById('details-image');
+                    setupImageFallback(imgEl, roomData.image);
+                    imgEl.src = roomData.image;
+
+                    const backBtn = document.getElementById('btn-back');
+                    backBtn.innerHTML = `&#8592; Back to ${bldgData.title}`;
+                    backBtn.href = `#building/${bldgId}`;
+
+                    document.getElementById('details-structure-card').style.display = 'none';
+
+                    viewMap.classList.remove('active');
+                    viewDetails.classList.add('active');
+                    window.scrollTo(0,0);
+                } else {
+                    window.location.hash = `#building/${bldgId}`;
+                }
+            } else {
+                // Show Map
+                viewDetails.classList.remove('active');
+                viewMap.classList.add('active');
+                setTimeout(() => fitToScreen(false), 50); 
+            }
+        }
+
+        window.addEventListener('hashchange', handleRoute);
+
+        // --- MAP ENGINE ---
+        const svg = document.getElementById('campus-svg-v4');
+        const container = document.getElementById('map-container');
+        const svgWidth = 1420, svgHeight = 980;
+        let scale = 1, panX = 0, panY = 0;
+        let isDragging = false, startClientX = 0, startClientY = 0, startPanX = 0, startPanY = 0, clickPrevented = false;
+
+        function updateTransform() { svg.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
+           
+        function fitToScreen(initial = false) {
+            if(!viewMap.classList.contains('active') && !initial) return;
+            const rect = container.getBoundingClientRect();
+            const width = rect.width || window.innerWidth;
+            const height = rect.height || (window.innerHeight - 120); 
+            const scaleX = width / svgWidth, scaleY = height / svgHeight;
+            scale = Math.min(scaleX, scaleY) * 0.95;
+            panX = (width - (svgWidth * scale)) / 2;
+            panY = (height - (svgHeight * scale)) / 2;
+            updateTransform();
+        }
+
+        function resetView() { scale = 1; panX = 20; panY = 20; updateTransform(); }
+
+        function zoom(factor, centerX, centerY) {
+            const newScale = Math.max(0.15, Math.min(scale * factor, 4));
+            panX = centerX - (centerX - panX) * (newScale / scale);
+            panY = centerY - (centerY - panY) * (newScale / scale);
+            scale = newScale; updateTransform();
+        }
+
+        document.getElementById('btn-fit').addEventListener('click', () => fitToScreen());
+        document.getElementById('btn-reset').addEventListener('click', resetView);
+        document.getElementById('btn-zoom-in').addEventListener('click', () => { const rect = container.getBoundingClientRect(); zoom(1.3, rect.width / 2, rect.height / 2); });
+        document.getElementById('btn-zoom-out').addEventListener('click', () => { const rect = container.getBoundingClientRect(); zoom(1 / 1.3, rect.width / 2, rect.height / 2); });
+
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault(); const rect = container.getBoundingClientRect();
+            zoom(e.deltaY < 0 ? 1.1 : (1 / 1.1), e.clientX - rect.left, e.clientY - rect.top);
+        }, { passive: false });
+
+        container.addEventListener('pointerdown', (e) => {
+            if (!e.isPrimary) return; 
+            isDragging = true; clickPrevented = false;
+            startClientX = e.clientX; startClientY = e.clientY;
+            startPanX = panX; startPanY = panY;
+            container.setPointerCapture(e.pointerId);
+        });
+
+        container.addEventListener('pointermove', (e) => {
+            if (!isDragging || !e.isPrimary) return;
+            const dx = e.clientX - startClientX, dy = e.clientY - startClientY;
+            if (Math.hypot(dx, dy) > 5) clickPrevented = true;
+            panX = startPanX + dx; panY = startPanY + dy; updateTransform();
+        });
+
+        container.addEventListener('pointerup', (e) => { isDragging = false; container.releasePointerCapture(e.pointerId); });
+        container.addEventListener('pointercancel', () => { isDragging = false; });
+
+        let initialPinchDistance = null, initialPinchScale = 1;
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                isDragging = false;
+                initialPinchDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+                initialPinchScale = scale;
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                const p1 = e.touches[0], p2 = e.touches[1];
+                const newScale = Math.max(0.15, Math.min(initialPinchScale * (Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY) / initialPinchDistance), 4));
+                const rect = container.getBoundingClientRect();
+                const centerX = ((p1.clientX + p2.clientX) / 2) - rect.left, centerY = ((p1.clientY + p2.clientY) / 2) - rect.top;
+                panX = centerX - (centerX - panX) * (newScale / scale);
+                panY = centerY - (centerY - panY) * (newScale / scale);
+                scale = newScale; updateTransform();
+            }
+        }, { passive: false });
+
+        document.querySelectorAll('.room-node').forEach(room => {
+            room.addEventListener('click', () => {
+                if (clickPrevented) return;
+                window.location.hash = `#building/${room.getAttribute('data-room')}`; 
+            });
+        });
+
+        window.addEventListener('resize', () => fitToScreen(false));
+
+        if (!window.location.hash) {
+            window.location.hash = '#map';
+        } else {
+            handleRoute();
+        }
+        fitToScreen(true);
+    </script>
+</body>
+</html>
